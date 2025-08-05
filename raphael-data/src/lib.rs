@@ -211,7 +211,15 @@ pub fn hq_percentage(quality: impl Into<u32>, max_quality: impl Into<u32>) -> Op
 pub fn is_cosmic_recipe(item_id: u32) -> bool {
     // hardcode here (rather than put into Item struct) to avoid git merge hell
     match item_id {
-        46830..=47740 | 48238..=48634 => true,
+        46849..=46859 |
+        46972..=46983 |
+        47096..=47107 |
+        47220..=47229 |
+        47344..=47353 |
+        47468..=47475 |
+        47592..=47603 |
+        47716..=47723 |
+        48238..=48634 => true,
         _ => false,
     }
 }
