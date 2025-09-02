@@ -1,4 +1,4 @@
-use crate::ITEMS;
+use crate::{CL_ICON_CHAR, HQ_ICON_CHAR, ITEMS};
 use raphael_sim::Action;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,7 +29,9 @@ const JOB_NAMES_EN: [&str; 8] = ["CRP", "BSM", "ARM", "GSM", "LTW", "WVR", "ALC"
 const JOB_NAMES_DE: [&str; 8] = ["ZMR", "GRS", "PLA", "GLD", "GER", "WEB", "ALC", "GRM"];
 const JOB_NAMES_FR: [&str; 8] = ["MEN", "FRG", "ARM", "ORF", "TAN", "COU", "ALC", "CUI"];
 const JOB_NAMES_CN: [&str; 8] = ["刻木", "锻铁", "铸甲", "雕金", "制革", "裁衣", "炼金", "烹调"];
-const JOB_NAMES_KR: [&str; 8] = ["목수", "대장", "갑주", "보석", "가죽", "재봉", "연금", "요리"];
+const JOB_NAMES_KR: [&str; 8] = [
+    "목수", "대장", "갑주", "보석", "가죽", "재봉", "연금", "요리",
+];
 
 pub fn get_job_name(job_id: u8, locale: Locale) -> &'static str {
     match locale {
@@ -51,22 +53,50 @@ pub static ITEM_NAMES_KR: phf::Map<u32, &str> = include!("../data/item_names_kr.
 
 pub fn get_item_name(item_id: u32, hq: bool, locale: Locale) -> Option<String> {
     let item_name = match locale {
-        Locale::EN => ITEM_NAMES_EN.get(&item_id)?.to_owned(),
-        Locale::DE => ITEM_NAMES_DE.get(&item_id)?.to_owned(),
-        Locale::FR => ITEM_NAMES_FR.get(&item_id)?.to_owned(),
-        Locale::JP => ITEM_NAMES_JP.get(&item_id)?.to_owned(),
-        Locale::CN => ITEM_NAMES_CN.get(&item_id)?.to_owned(),
-        Locale::KR => ITEM_NAMES_KR.get(&item_id)?.to_owned(),
+        Locale::EN => *ITEM_NAMES_EN.get(&item_id)?,
+        Locale::DE => *ITEM_NAMES_DE.get(&item_id)?,
+        Locale::FR => *ITEM_NAMES_FR.get(&item_id)?,
+        Locale::JP => *ITEM_NAMES_JP.get(&item_id)?,
+        Locale::CN => *ITEM_NAMES_CN.get(&item_id)?,
+        Locale::KR => *ITEM_NAMES_KR.get(&item_id)?,
     };
-    let item_entry = ITEMS.get(&item_id);
-    let always_collectable = item_entry.is_some_and(|item| item.always_collectable);
-    if !always_collectable {
-        match hq {
-            true => Some(format!("{} \u{e03c}", item_name)),
-            false => Some(item_name.to_string()),
-        }
+    if ITEMS.get(&item_id)?.always_collectable {
+        Some(format!("{} {}", item_name, CL_ICON_CHAR))
+    } else if hq {
+        Some(format!("{} {}", item_name, HQ_ICON_CHAR))
     } else {
-        Some(format!("{} \u{e03d}", item_name))
+        Some(item_name.into())
+    }
+}
+
+pub static STELLAR_MISSION_NAMES_EN: phf::Map<u32, &str> =
+    include!("../data/stellar_mission_names_en.rs");
+pub static STELLAR_MISSION_NAMES_DE: phf::Map<u32, &str> =
+    include!("../data/stellar_mission_names_de.rs");
+pub static STELLAR_MISSION_NAMES_FR: phf::Map<u32, &str> =
+    include!("../data/stellar_mission_names_fr.rs");
+pub static STELLAR_MISSION_NAMES_JP: phf::Map<u32, &str> =
+    include!("../data/stellar_mission_names_jp.rs");
+pub static STELLAR_MISSION_NAMES_KR: phf::Map<u32, &str> =
+    include!("../data/stellar_mission_names_kr.rs");
+
+pub fn get_stellar_mission_name(mission_id: u32, locale: Locale) -> Option<String> {
+    match locale {
+        Locale::EN => STELLAR_MISSION_NAMES_EN
+            .get(&mission_id)
+            .map(std::string::ToString::to_string),
+        Locale::DE => STELLAR_MISSION_NAMES_DE
+            .get(&mission_id)
+            .map(std::string::ToString::to_string),
+        Locale::FR => STELLAR_MISSION_NAMES_FR
+            .get(&mission_id)
+            .map(std::string::ToString::to_string),
+        Locale::JP => STELLAR_MISSION_NAMES_JP
+            .get(&mission_id)
+            .map(std::string::ToString::to_string),
+        Locale::KR => STELLAR_MISSION_NAMES_KR
+            .get(&mission_id)
+            .map(std::string::ToString::to_string),
     }
 }
 

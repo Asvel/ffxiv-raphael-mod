@@ -18,7 +18,6 @@ pub const CL_ICON_CHAR: char = '\u{e03d}';
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Item {
     pub item_level: u16,
-    pub can_be_hq: bool,
     pub always_collectable: bool,
 }
 
@@ -68,10 +67,19 @@ pub struct Recipe {
     pub req_control: u16,
 }
 
+#[derive(Debug)]
+pub struct StellarMission {
+    pub job_id: u8,
+    pub recipe_ids: &'static [u32],
+}
+
 pub const RLVLS: &[RecipeLevel] = include!("../data/rlvls.rs");
 pub const LEVEL_ADJUST_TABLE: &[u16] = include!("../data/level_adjust_table.rs");
 pub static RECIPES: phf::OrderedMap<u32, Recipe> = include!("../data/recipes.rs");
 pub const ITEMS: phf::OrderedMap<u32, Item> = include!("../data/items.rs");
+
+pub const STELLAR_MISSIONS: phf::OrderedMap<u32, StellarMission> =
+    include!("../data/stellar_missions.rs");
 
 pub fn get_game_settings(
     recipe: Recipe,
@@ -119,6 +127,7 @@ pub fn get_game_settings(
         allowed_actions = allowed_actions.remove(Action::QuickInnovation);
     }
 
+    #[allow(clippy::option_if_let_else)]
     match custom_recipe_overrides {
         Some(overrides) => Settings {
             max_cp: cp as _,
@@ -167,10 +176,8 @@ pub fn get_initial_quality(
     let mut max_ilvl = 0;
     let mut provided_ilvl = 0;
     for (index, (item, max_amount)) in ingredients.into_iter().enumerate() {
-        if item.can_be_hq {
-            max_ilvl += max_amount as u16 * item.item_level;
-            provided_ilvl += hq_ingredients[index] as u16 * item.item_level;
-        }
+        max_ilvl += max_amount as u16 * item.item_level;
+        provided_ilvl += hq_ingredients[index] as u16 * item.item_level;
     }
 
     let rlvl = if recipe.max_level_scaling != 0 {
