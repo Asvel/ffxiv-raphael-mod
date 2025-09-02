@@ -17,15 +17,15 @@ pub trait ActionImpl {
 
     #[inline]
     fn progress_increase(state: &SimulationState, settings: &Settings) -> u32 {
-        let action_mod = u32::from(Self::progress_modifier(state, settings));
-        let effect_mod = u32::from(state.effects.progress_modifier());
+        let action_mod = Self::progress_modifier(state, settings);
+        let effect_mod = state.effects.progress_modifier();
         u32::from(settings.base_progress) * action_mod * effect_mod / 10000
     }
 
     #[inline]
     fn quality_increase(state: &SimulationState, settings: &Settings, condition: Condition) -> u32 {
-        let action_mod = u32::from(Self::quality_modifier(state, settings));
-        let effect_mod = u32::from(state.effects.quality_modifier());
+        let action_mod = Self::quality_modifier(state, settings);
+        let effect_mod = state.effects.quality_modifier();
         let condition_mod = match condition {
             Condition::Normal => 2,
             Condition::Good => 3,
@@ -769,7 +769,7 @@ impl ActionImpl for TrainedPerfection {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(strum_macros::EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Action {
     BasicSynthesis,
@@ -867,6 +867,42 @@ impl Action {
             Self::TrainedPerfection => 3,
             Self::TrainedEye => 3,
             Self::QuickInnovation => 3,
+        }
+    }
+
+    pub const fn action_id(self) -> u32 {
+        match self {
+            Self::BasicSynthesis => 100001,
+            Self::BasicTouch => 100002,
+            Self::MasterMend => 100003,
+            Self::Observe => 100010,
+            Self::TricksOfTheTrade => 100371,
+            Self::WasteNot => 4631,
+            Self::Veneration => 19297,
+            Self::StandardTouch => 100004,
+            Self::GreatStrides => 260,
+            Self::Innovation => 19004,
+            Self::WasteNot2 => 4639,
+            Self::ByregotsBlessing => 100339,
+            Self::PreciseTouch => 100128,
+            Self::MuscleMemory => 100379,
+            Self::CarefulSynthesis => 100203,
+            Self::Manipulation => 4574,
+            Self::PrudentTouch => 100227,
+            Self::AdvancedTouch => 100411,
+            Self::Reflect => 100387,
+            Self::PreparatoryTouch => 100299,
+            Self::Groundwork => 100403,
+            Self::DelicateSynthesis => 100323,
+            Self::IntensiveSynthesis => 100315,
+            Self::TrainedEye => 100283,
+            Self::HeartAndSoul => 100419,
+            Self::PrudentSynthesis => 100427,
+            Self::TrainedFinesse => 100435,
+            Self::RefinedTouch => 100443,
+            Self::QuickInnovation => 100459,
+            Self::ImmaculateMend => 100467,
+            Self::TrainedPerfection => 100475,
         }
     }
 }

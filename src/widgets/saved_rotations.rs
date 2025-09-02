@@ -176,19 +176,19 @@ impl PartialEq for Rotation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum LoadOperation {
-    LoadRotation,
-    LoadRotationRecipe,
-    LoadRotationRecipeConsumables,
-    LoadRotationRecipeConsumablesConfiguration,
+    Rotation,
+    RotationRecipe,
+    RotationRecipeConsumables,
+    RotationRecipeConsumablesConfiguration,
 }
 
 impl std::fmt::Display for LoadOperation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let output_str = match self {
-            Self::LoadRotation => "Load rotation",
-            Self::LoadRotationRecipe => "Load rotation & recipe",
-            Self::LoadRotationRecipeConsumables => "Load rotation, recipe & consumables",
-            Self::LoadRotationRecipeConsumablesConfiguration =>
+            Self::Rotation => "Load rotation",
+            Self::RotationRecipe => "Load rotation & recipe",
+            Self::RotationRecipeConsumables => "Load rotation, recipe & consumables",
+            Self::RotationRecipeConsumablesConfiguration =>
                 "Load rotation, recipe, consumables & configuration",
         };
         write!(f, "{}", output_str)
@@ -197,7 +197,7 @@ impl std::fmt::Display for LoadOperation {
 
 impl Default for LoadOperation {
     fn default() -> Self {
-        Self::LoadRotation
+        Self::Rotation
     }
 }
 
@@ -212,7 +212,7 @@ impl Default for SavedRotationsConfig {
     fn default() -> Self {
         Self {
             load_from_saved_rotations: false,
-            default_load_operation: LoadOperation::LoadRotation,
+            default_load_operation: LoadOperation::Rotation,
             max_history_size: 50,
         }
     }
@@ -349,10 +349,10 @@ impl<'a> RotationWidget<'a> {
                         ui.close();
                     }
                     for saved_rotation_load_operation in [
-                        LoadOperation::LoadRotation,
-                        LoadOperation::LoadRotationRecipe,
-                        LoadOperation::LoadRotationRecipeConsumables,
-                        LoadOperation::LoadRotationRecipeConsumablesConfiguration,
+                        LoadOperation::Rotation,
+                        LoadOperation::RotationRecipe,
+                        LoadOperation::RotationRecipeConsumables,
+                        LoadOperation::RotationRecipeConsumablesConfiguration,
                     ] {
                         let text = format!("{}", saved_rotation_load_operation);
                         if ui.button(text).clicked() {
@@ -375,19 +375,19 @@ impl<'a> RotationWidget<'a> {
                 }
                 if let Some(load_operation) = selected_load_operation {
                     match load_operation {
-                        LoadOperation::LoadRotation => {
+                        LoadOperation::Rotation => {
                             self.actions.clone_from(&self.rotation.actions);
                         }
-                        LoadOperation::LoadRotationRecipe => {
+                        LoadOperation::RotationRecipe => {
                             self.actions.clone_from(&self.rotation.actions);
                             self.load_saved_recipe();
                         }
-                        LoadOperation::LoadRotationRecipeConsumables => {
+                        LoadOperation::RotationRecipeConsumables => {
                             self.actions.clone_from(&self.rotation.actions);
                             self.load_saved_recipe();
                             self.load_saved_consumables();
                         }
-                        LoadOperation::LoadRotationRecipeConsumablesConfiguration => {
+                        LoadOperation::RotationRecipeConsumablesConfiguration => {
                             self.actions.clone_from(&self.rotation.actions);
                             self.load_saved_recipe();
                             self.load_saved_consumables();
@@ -637,10 +637,10 @@ impl egui::Widget for SavedRotationsWidget<'_> {
                     ui.separator();
                     ui.label("Default operation on clicking Load button:");
                     for saved_rotation_load_operation in [
-                        LoadOperation::LoadRotation,
-                        LoadOperation::LoadRotationRecipe,
-                        LoadOperation::LoadRotationRecipeConsumables,
-                        LoadOperation::LoadRotationRecipeConsumablesConfiguration,
+                        LoadOperation::Rotation,
+                        LoadOperation::RotationRecipe,
+                        LoadOperation::RotationRecipeConsumables,
+                        LoadOperation::RotationRecipeConsumablesConfiguration,
                     ] {
                         let text = format!("{}", saved_rotation_load_operation);
                         ui.selectable_value(

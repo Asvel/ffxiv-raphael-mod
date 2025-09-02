@@ -83,11 +83,11 @@ impl Widget for StatsEdit<'_> {
                     egui::TextEdit::singleline(input_string)
                         .hint_text("📋 Paste config here to load"),
                 );
-                if input_response.changed() {
-                    if let Ok(crafter_stats) = ron::from_str(input_string) {
-                        self.crafter_config.crafter_stats = crafter_stats;
-                        ui.ctx().animate_bool_with_time(paste_id, true, 0.0);
-                    }
+                if input_response.changed()
+                    && let Ok(crafter_stats) = ron::from_str(input_string)
+                {
+                    self.crafter_config.crafter_stats = crafter_stats;
+                    ui.ctx().animate_bool_with_time(paste_id, true, 0.0);
                 }
             });
 
