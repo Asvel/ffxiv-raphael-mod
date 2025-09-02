@@ -28,6 +28,29 @@ async fn fetch_and_parse<T: SheetData>(lang: &str) -> Vec<T> {
     }
 }
 
+macro_rules! fetch_and_parse_names_cn {
+    ( $type:ident, $names_en:expr ) => {
+        {
+            let sheet_path = format!("../ffxiv-datamining-cn/{}.csv", $type::SHEET);
+            let sheet: Vec<_> = csv::Reader::from_path(sheet_path).unwrap()
+                .records().skip(2).collect();
+            let names_cn: Vec<_> = $names_en.iter().map(|entry_en| $type {
+                id: entry_en.id,
+                name: 'v: {
+                    if let Some(row_cn) = sheet.get(entry_en.id as usize) {
+                        let name_cn = &row_cn.as_ref().unwrap()[1];
+                        if !name_cn.is_empty() {
+                            break 'v name_cn.to_string()
+                        }
+                    }
+                    entry_en.name.clone()
+                },
+            }).collect();
+            names_cn
+        }
+    }
+}
+
 fn export_rlvls(rlvls: &[RecipeLevel]) {
     let path = std::path::absolute("./raphael-data/data/rlvls.rs").unwrap();
     let mut writer = BufWriter::new(File::create(&path).unwrap());
@@ -179,27 +202,14 @@ async fn main() {
     let mut item_names_de = item_names_de.await.unwrap();
     let mut item_names_fr = item_names_fr.await.unwrap();
     let mut item_names_jp = item_names_jp.await.unwrap();
+    let mut item_names_cn = fetch_and_parse_names_cn!(ItemName, item_names_en);
     // let mut item_names_kr = item_names_kr.await.unwrap();
-
-    let items_cn: Vec<_> = csv::Reader::from_path("../ffxiv-datamining-cn/Item.csv").unwrap()
-        .records().skip(2).collect();
-    let mut item_names_cn: Vec<_> = item_names_en.iter().map(|item_name| ItemName {
-        id: item_name.id,
-        name: 'v: {
-            if let Some(item_cn) = items_cn.get(item_name.id as usize) {
-                let name_cn = &item_cn.as_ref().unwrap()[1];
-                if !name_cn.is_empty() {
-                    break 'v name_cn.to_string()
-                }
-            }
-            item_name.name.clone()
-        },
-    }).collect();
-
     let mut stellar_mission_names_en = stellar_mission_names_en.await.unwrap();
     let mut stellar_mission_names_de = stellar_mission_names_de.await.unwrap();
     let mut stellar_mission_names_fr = stellar_mission_names_fr.await.unwrap();
     let mut stellar_mission_names_jp = stellar_mission_names_jp.await.unwrap();
+    let mut stellar_mission_names_cn =
+        fetch_and_parse_names_cn!(StellarMissionName, stellar_mission_names_en);
     // let mut stellar_mission_names_kr = stellar_mission_names_kr.await.unwrap();
 
     // For some reason some recipes have items with ID 0 as their result
@@ -255,6 +265,8 @@ async fn main() {
         .retain(|stellar_mission_name| crafter_stellar_missions.contains(&stellar_mission_name.id));
     stellar_mission_names_jp
         .retain(|stellar_mission_name| crafter_stellar_missions.contains(&stellar_mission_name.id));
+    stellar_mission_names_cn
+        .retain(|stellar_mission_name| crafter_stellar_missions.contains(&stellar_mission_name.id));
     // stellar_mission_names_kr.retain(|stellar_mission_name| {
     //     crafter_stellar_missions.contains(&stellar_mission_name.id)
     //         && !stellar_mission_name.name.is_empty()
@@ -278,6 +290,7 @@ async fn main() {
     export_stellar_mission_names(&stellar_mission_names_de, "de");
     export_stellar_mission_names(&stellar_mission_names_fr, "fr");
     export_stellar_mission_names(&stellar_mission_names_jp, "jp");
+    export_stellar_mission_names(&stellar_mission_names_cn, "cn");
     // export_stellar_mission_names(&stellar_mission_names_kr, "kr");
 
     generate_font_subset(
@@ -286,6 +299,7 @@ async fn main() {
         &[
             "./raphael-data/src/locales.rs",
             "./raphael-data/data/item_names_jp.rs",
+            "./raphael-data/data/stellar_mission_names_jp.rs",
             "マクロ次へ製作完成了",
         ],
     );
@@ -295,6 +309,7 @@ async fn main() {
         &[
             "./raphael-data/src/locales.rs",
             "./raphael-data/data/item_names_cn.rs",
+            "./raphael-data/data/stellar_mission_names_cn.rs",
             "宏已制作完成",
         ],
     );
@@ -304,6 +319,7 @@ async fn main() {
         &[
             "./raphael-data/src/locales.rs",
             "./raphael-data/data/item_names_kr.rs",
+            "./raphael-data/data/stellar_mission_names_kr.rs",
         ],
     );
 }
