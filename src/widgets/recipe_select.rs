@@ -192,7 +192,7 @@ impl<'a> RecipeSelect<'a> {
                         *self.recipe_config = RecipeConfiguration {
                             recipe,
                             quality_source: QualitySource::HqMaterialList(
-                                if raphael_data::is_cosmic_recipe(recipe.item_id) {
+                                if raphael_data::STELLAR_ITEMS.contains(&recipe.item_id) {
                                     recipe.ingredients.map(|ingredient| ingredient.amount as u8)
                                 } else {
                                     [0; 6]

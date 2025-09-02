@@ -81,6 +81,16 @@ pub const ITEMS: phf::OrderedMap<u32, Item> = include!("../data/items.rs");
 pub const STELLAR_MISSIONS: phf::OrderedMap<u32, StellarMission> =
     include!("../data/stellar_missions.rs");
 
+pub const STELLAR_ITEMS: std::sync::LazyLock<std::collections::HashSet<u32>> =
+    std::sync::LazyLock::new(||
+        STELLAR_MISSIONS
+            .values()
+            .map(|mission| mission.recipe_ids)
+            .flatten()
+            .map(|recipe_id| RECIPES[recipe_id].item_id)
+            .collect()
+    );
+
 pub fn get_game_settings(
     recipe: Recipe,
     custom_recipe_overrides: Option<CustomRecipeOverrides>,
@@ -213,20 +223,4 @@ pub fn hq_percentage(quality: impl Into<u32>, max_quality: impl Into<u32>) -> Op
     let max_quality: u32 = max_quality.into();
     let ratio = (quality * 100).checked_div(max_quality)?;
     Some(HQ_LOOKUP[std::cmp::min(ratio as usize, 100)])
-}
-
-pub fn is_cosmic_recipe(item_id: u32) -> bool {
-    // hardcode here (rather than put into Item struct) to avoid git merge hell
-    match item_id {
-        46849..=46859 |
-        46972..=46983 |
-        47096..=47107 |
-        47220..=47229 |
-        47344..=47353 |
-        47468..=47475 |
-        47592..=47603 |
-        47716..=47723 |
-        48238..=48634 => true,
-        _ => false,
-    }
 }

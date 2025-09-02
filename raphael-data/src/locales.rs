@@ -110,7 +110,7 @@ pub fn get_stellar_mission_name(mission_id: u32, locale: Locale) -> Option<Strin
 }
 
 pub fn get_recipe_name(recipe: &crate::Recipe, hq: bool, locale: Locale) -> Option<String> {
-    if crate::is_cosmic_recipe(recipe.item_id) {
+    if crate::STELLAR_ITEMS.contains(&recipe.item_id) {
         let item_name = get_item_name_raw(recipe.item_id, locale)?;
         let item_entry = ITEMS.get(&recipe.item_id);
         let collectable = match item_entry.is_some_and(|item| item.always_collectable) {
