@@ -120,7 +120,7 @@ impl Widget for PotionSelect<'_> {
                     [
                         TableColumnWidth::SelectButton,
                         TableColumnWidth::RelativeToRemainingClamped {
-                            scale: 0.7,
+                            scale: 0.4,
                             min: 220.0,
                             max: 320.0,
                         },
