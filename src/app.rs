@@ -268,7 +268,7 @@ impl eframe::App for MacroSolverApp {
                         ui.add(
                             egui::Hyperlink::from_label_and_url(
                                 t!(locale, "View source on GitHub"),
-                                "https://github.com/Asvel/ffxiv-raphael-cn",
+                                "https://github.com/Asvel/ffxiv-raphael-mod",
                             )
                             .open_in_new_tab(true),
                         );
@@ -893,7 +893,7 @@ impl MacroSolverApp {
                 );
                 ui.add(egui::Hyperlink::from_label_and_url(
                     egui::RichText::new(t!(locale, "Download latest release from GitHub")).small(),
-                    "https://github.com/Asvel/ffxiv-raphael-cn/releases/latest",
+                    "https://github.com/Asvel/ffxiv-raphael-mod/releases/latest",
                 ));
             }
         }

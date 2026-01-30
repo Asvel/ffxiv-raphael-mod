@@ -5,7 +5,7 @@ use std::sync::{LazyLock, Mutex};
 use raphael_data::Locale;
 use raphael_translations::t;
 
-const GH_RELEASE_API: &str = "https://api.github.com/repos/Asvel/ffxiv-raphael-cn/releases/latest";
+const GH_RELEASE_API: &str = "https://api.github.com/repos/Asvel/ffxiv-raphael-mod/releases/latest";
 
 static CURRENT_VERSION: LazyLock<semver::Version> =
     LazyLock::new(|| semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap());
@@ -86,7 +86,7 @@ pub fn show_dialogues(ctx: &egui::Context, locale: Locale) {
                     ui.label(format!("v{} ➡ v{} ", *CURRENT_VERSION, latest_version));
                     ui.add(egui::Hyperlink::from_label_and_url(
                         t!(locale, "(view on GitHub)"),
-                        "https://github.com/Asvel/ffxiv-raphael-cn/releases/latest",
+                        "https://github.com/Asvel/ffxiv-raphael-mod/releases/latest",
                     ));
                 });
                 ui.separator();

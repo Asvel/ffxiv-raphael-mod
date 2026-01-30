@@ -1,8 +1,6 @@
 # Raphael XIV
 
-Fork of [raphael-rs](https://github.com/KonaeAkira/raphael-rs), add Chinese data and a few opinionated UX changes, mainly for my personal use.
-
-There is a [cn](https://github.com/Asvel/ffxiv-raphael-cn/tree/cn) branch contains only Chinese locale changes, in case anyone need it.
+Fork of [raphael-rs](https://github.com/KonaeAkira/raphael-rs), contains some opinionated UX changes, mainly for my personal use.
 
 ---
 
