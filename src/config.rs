@@ -4,7 +4,7 @@ use raphael_data::{CrafterStats, CustomRecipeOverrides, Locale, Recipe};
 use raphael_translations::t;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum QualitySource {
     HqMaterialList([u8; 6]),
     Value(u16),
@@ -51,15 +51,46 @@ impl Default for RecipeConfiguration {
 pub struct CrafterConfig {
     pub selected_job: u8,
     pub crafter_stats: [CrafterStats; 8],
+    #[serde(default)]
+    working_stats: CrafterStats,
+    #[serde(default = "CrafterConfig::intermediate_attached_job")]
+    attached_job: Option<u8>,
 }
 
 impl CrafterConfig {
     pub fn active_stats(&self) -> &CrafterStats {
-        &self.crafter_stats[self.selected_job as usize]
+        if self.attached_job != None {
+            &self.crafter_stats[self.selected_job as usize]
+        } else {
+            &self.working_stats
+        }
     }
 
     pub fn active_stats_mut(&mut self) -> &mut CrafterStats {
-        &mut self.crafter_stats[self.selected_job as usize]
+        // egui::Checkbox doesn't support value setter, so we have to make a copy preemptively
+        if let Some(job) = self.attached_job {
+            if job != self.selected_job {
+                self.attached_job = Some(self.selected_job);
+                self.working_stats = self.crafter_stats[self.selected_job as usize];
+            }
+        }
+        &mut self.working_stats
+    }
+
+    fn intermediate_attached_job() -> Option<u8> {
+        Some(255)
+    }
+
+    pub fn reset_to_job(&mut self) {
+        self.attached_job = CrafterConfig::intermediate_attached_job();
+    }
+
+    pub fn detach_from_job(&mut self) {
+        self.attached_job = None;
+    }
+
+    pub fn is_detached(&self) -> bool {
+        self.attached_job.is_none()
     }
 }
 
@@ -68,6 +99,8 @@ impl Default for CrafterConfig {
         Self {
             selected_job: 1,
             crafter_stats: Default::default(),
+            working_stats: Default::default(),
+            attached_job: CrafterConfig::intermediate_attached_job(),
         }
     }
 }

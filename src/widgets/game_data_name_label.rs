@@ -46,6 +46,7 @@ impl From<&Recipe> for NameSource {
 pub struct GameDataNameLabel {
     name_source: NameSource,
     locale: Locale,
+    name_text: Option<String>,
 }
 
 impl GameDataNameLabel {
@@ -53,6 +54,14 @@ impl GameDataNameLabel {
         Self {
             name_source: name_source.into(),
             locale,
+            name_text: None,
+        }
+    }
+    pub fn from_recipe(recipe: &Recipe, locale: Locale) -> Self {
+        Self {
+            name_source: recipe.into(),
+            locale,
+            name_text: raphael_data::get_recipe_name(&recipe, locale),
         }
     }
 }
@@ -62,6 +71,7 @@ impl egui::Widget for GameDataNameLabel {
         let Self {
             name_source,
             locale,
+            name_text,
         } = self;
         let id = ui.id().with(&name_source);
         let mut layout_job = egui::text::LayoutJob::default();
@@ -71,7 +81,7 @@ impl egui::Widget for GameDataNameLabel {
             NameSource::Item { item_id, hq } => {
                 get_item_name(item_id, hq, locale).unwrap_or(t!(locale, "Unknown item").to_owned())
             }
-            NameSource::Recipe { item_id, .. } => get_item_name(item_id, false, locale)
+            NameSource::Recipe { .. } => name_text
                 .unwrap_or(t!(locale, "Unknown item").to_owned()),
             NameSource::Mission { mission_id } => get_stellar_mission_name(mission_id, locale)
                 .unwrap_or(t!(locale, "Unknown mission"))

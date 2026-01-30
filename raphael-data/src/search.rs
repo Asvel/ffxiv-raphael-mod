@@ -41,6 +41,16 @@ pub fn find_recipes(
     search_string: &str,
     locale: crate::Locale,
 ) -> impl Iterator<Item = RecipeSearchEntry> {
+    let matches = if search_string.starts_with(|c: char| c.is_ascii_digit()) {
+        RECIPES.entries().filter_map(|(recipe_id, recipe)| {
+            crate::get_recipe_name(&recipe, locale)?
+                .contains(search_string)
+                .then(|| (MatcherCandidate {
+                    haystack: "",
+                    associated_data: (recipe_id, recipe),
+                }, 0))
+        }).collect::<Vec<_>>()
+    } else {
     let pattern = Pattern::parse(
         &preprocess_pattern(search_string),
         CaseMatching::Ignore,
@@ -54,6 +64,7 @@ pub fn find_recipes(
         })
     });
     let matches = pattern.match_list(entries, MATCHER.lock().as_mut().unwrap());
+    matches };
     matches
         .into_iter()
         .map(|(entry, _score)| entry.associated_data)

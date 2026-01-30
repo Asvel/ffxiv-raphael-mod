@@ -48,7 +48,7 @@ raphael-data = { workspace = true, features = ["serde"] }
 raphael-translations = { workspace = true }
 
 egui = "0.33.2"
-egui_extras = { version = "0.33.2", features = ["http", "webp"] }
+egui_extras = { version = "0.33.2", features = ["file", "http", "webp"] }
 
 rayon = { workspace = true }
 serde = { workspace = true }

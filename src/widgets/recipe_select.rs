@@ -68,6 +68,7 @@ type StellarMissionSearchCache<'a> =
 
 pub struct RecipeSelect<'a> {
     crafter_config: &'a mut CrafterConfig,
+    solver_config: &'a mut crate::context::SolverConfig,
     recipe_config: &'a mut RecipeConfiguration,
     custom_recipe_overrides_config: &'a mut CustomRecipeOverridesConfiguration,
     selected_food: Option<Consumable>, // used for base prog/qual display
@@ -79,6 +80,7 @@ impl<'a> RecipeSelect<'a> {
     pub fn new(app_context: &'a mut AppContext) -> Self {
         let AppContext {
             locale,
+            solver_config,
             recipe_config,
             custom_recipe_overrides_config,
             selected_food,
@@ -89,6 +91,7 @@ impl<'a> RecipeSelect<'a> {
 
         Self {
             crafter_config,
+            solver_config,
             recipe_config,
             custom_recipe_overrides_config,
             selected_food: *selected_food,
@@ -133,11 +136,18 @@ impl<'a> RecipeSelect<'a> {
 
         match search_domain {
             SearchDomain::Recipes => {
-                let search_result = ui.ctx().memory_mut(|mem| {
+                let mut search_result = ui.ctx().memory_mut(|mem| {
                     mem.caches
                         .cache::<RecipeSearchCache<'_>>()
                         .get((&search_text, locale))
                 });
+                if !search_text.is_empty() {
+                    let mut other_job: Vec<_> = search_result.extract_if(.., |(recipe_id, _)| {
+                        raphael_data::RECIPES.get(*recipe_id).unwrap().job_id
+                            != self.crafter_config.selected_job
+                    }).collect();
+                    search_result.append(&mut other_job);
+                }
                 self.draw_recipe_select_table(ui, search_result);
             }
             SearchDomain::StellarMissions => {
@@ -192,9 +202,21 @@ impl<'a> RecipeSelect<'a> {
                 row.col(|ui| {
                     if ui.button(t!(locale, "Select")).clicked() {
                         self.crafter_config.selected_job = recipe.job_id;
+                        if self.recipe_config.recipe.quality_factor != recipe.quality_factor
+                            || self.recipe_config.recipe.recipe_level != recipe.recipe_level
+                        {
+                            self.solver_config.quality_target =
+                                crate::config::QualityTarget::default();
+                        }
                         *self.recipe_config = RecipeConfiguration {
                             recipe: *recipe,
-                            quality_source: QualitySource::HqMaterialList([0; 6]),
+                            quality_source: QualitySource::HqMaterialList(
+                                if raphael_data::STELLAR_ITEMS.contains(&recipe.item_id) {
+                                    recipe.ingredients.map(|ingredient| ingredient.amount as u8)
+                                } else {
+                                    [0; 6]
+                                }
+                            ),
                         }
                     }
                 });
@@ -202,7 +224,7 @@ impl<'a> RecipeSelect<'a> {
                     ui.label(get_job_name(recipe.job_id, locale));
                 });
                 row.col(|ui| {
-                    ui.add(GameDataNameLabel::new(recipe, locale));
+                    ui.add(GameDataNameLabel::from_recipe(recipe, locale));
                 });
             });
         });
@@ -275,7 +297,7 @@ impl<'a> RecipeSelect<'a> {
                                         quality_source: QualitySource::HqMaterialList([0; 6]),
                                     }
                                 }
-                                ui.add(GameDataNameLabel::new(recipe, locale));
+                                ui.add(GameDataNameLabel::from_recipe(recipe, locale));
                                 ui.allocate_space(ui.available_size());
                             });
                         });
@@ -463,7 +485,7 @@ impl Widget for RecipeSelect<'_> {
                         &mut collapsed,
                     );
                     ui.label(egui::RichText::new(t!(locale, "Recipe")).strong());
-                    ui.add(GameDataNameLabel::new(&self.recipe_config.recipe, locale));
+                    ui.add(GameDataNameLabel::from_recipe(&self.recipe_config.recipe, locale));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let use_custom_recipe =
                             &mut self.custom_recipe_overrides_config.use_custom_recipe;

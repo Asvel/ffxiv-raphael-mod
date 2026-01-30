@@ -35,6 +35,10 @@ impl Widget for StatsEdit<'_> {
                         }
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new(get_job_name(job_id, locale)).strong());
+                            if ui.button(t!(locale, "Copy current")).clicked() {
+                                self.crafter_config.crafter_stats[job_id as usize] =
+                                    *self.crafter_config.active_stats();
+                            }
                             if ui.button(t!(locale, "Copy to all jobs")).clicked() {
                                 let stats = self.crafter_config.crafter_stats[job_id as usize];
                                 self.crafter_config.crafter_stats = [stats; 8];
@@ -95,7 +99,8 @@ impl Widget for StatsEdit<'_> {
                         );
                         if button_response.clicked() {
                             ui.ctx()
-                                .copy_text(ron::to_string(self.crafter_config).unwrap());
+                                .copy_text(ron::to_string(
+                                    &self.crafter_config.crafter_stats).unwrap());
                             ui.ctx().animate_bool_with_time(copy_id, true, 0.0);
                         }
 
@@ -112,13 +117,18 @@ impl Widget for StatsEdit<'_> {
                                 .desired_width(text_width(ui, hint_text, egui::TextStyle::Body)),
                         );
                         if input_response.changed()
-                            && let Ok(crafter_config) = ron::from_str(input_string)
+                            && let Ok(crafter_stats) = ron::from_str(input_string)
                         {
-                            *self.crafter_config = crafter_config;
+                            self.crafter_config.crafter_stats = crafter_stats;
                             self.crafter_config.selected_job = selected_job;
                             ui.ctx().animate_bool_with_time(paste_id, true, 0.0);
                         }
                     });
+
+                    // sync working stats continuously while stats window is open
+                    if !self.crafter_config.is_detached() {
+                        self.crafter_config.reset_to_job();
+                    }
                 })
             })
             .inner

@@ -202,15 +202,19 @@ impl MacroTextBox {
             }
         }
         lines.extend(actions.iter().map(|action| {
+            let q = match fixed_formatting_data.locale {
+                Locale::JP | Locale::CN | Locale::TW => "",
+                _ => "\"",
+            };
             if config.include_delay {
                 format!(
-                    "/ac \"{}\" <wait.{}>",
+                    "/ac {q}{}{q} <wait.{}>",
                     action_name(*action, fixed_formatting_data.locale),
                     action.time_cost() + config.extra_delay
                 )
             } else {
                 format!(
-                    "/ac \"{}\"",
+                    "/ac {q}{}{q}",
                     action_name(*action, fixed_formatting_data.locale)
                 )
             }
@@ -230,7 +234,9 @@ impl MacroTextBox {
                     &fixed_formatting_data.notification_format
                 };
 
-                lines.push(format_custom_macro_command(notification, index, max_index))
+                if !notification.is_empty() {
+                    lines.push(format_custom_macro_command(notification, index, max_index));
+                }
             }
         }
         Self {
@@ -331,7 +337,13 @@ impl Widget for MacroView<'_> {
                         let chunk_size = 15 - usize::from(config.intro_enabled);
                         let avoid_notif = config.notification_config.avoid_single_action_macro
                             && remaining_actions.len() == chunk_size;
-                        let has_notif = config.notification_enabled && !avoid_notif;
+                        let empty_last = !config.notification_config.default_notification
+                            && config.notification_config.different_last_notification
+                            && config.notification_config
+                                .custom_last_notification_format.is_empty()
+                            && remaining_actions.len() <= chunk_size;
+                        let has_notif = config.notification_enabled && !avoid_notif
+                            && !empty_last;
                         chunk_size - usize::from(has_notif)
                     } else {
                         usize::MAX

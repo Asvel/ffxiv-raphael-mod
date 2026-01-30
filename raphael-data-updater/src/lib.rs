@@ -22,3 +22,6 @@ pub trait SheetData: Sized {
     fn row_id(&self) -> u32;
     fn from_json(value: &json::JsonValue) -> Option<Self>;
 }
+
+mod font;
+pub use font::generate_font_subset;

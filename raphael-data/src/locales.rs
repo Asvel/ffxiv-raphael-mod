@@ -120,6 +120,24 @@ pub fn get_stellar_mission_name(mission_id: u32, locale: Locale) -> Option<&'sta
     }
 }
 
+pub fn get_recipe_name(recipe: &crate::Recipe, locale: Locale) -> Option<String> {
+    if crate::STELLAR_ITEMS.contains(&recipe.item_id) {
+        let item_name = get_raw_item_name(recipe.item_id, locale)?;
+        let item_entry = ITEMS.get(recipe.item_id);
+        let collectable = match item_entry.is_some_and(|item| item.always_collectable) {
+            true => " \u{e03d}",
+            false => ""
+        };
+        let rlvl_record = crate::RLVLS[recipe.recipe_level as usize];
+        let progress = (rlvl_record.max_progress * recipe.progress_factor / 100) as u16;
+        let quality = (rlvl_record.max_quality * recipe.quality_factor / 100) as u16;
+        let durability = rlvl_record.max_durability * recipe.durability_factor / 100;
+        Some(format!("{item_name}[{progress}/{quality}/{durability}]{collectable}"))
+    } else {
+        get_item_name(recipe.item_id, false, locale)
+    }
+}
+
 pub const fn action_name(action: Action, locale: Locale) -> &'static str {
     match locale {
         Locale::EN => action_name_en(action),

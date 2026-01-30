@@ -82,6 +82,16 @@ pub const ITEMS: NciArray<u32, Item> = include!("../data/items.rs");
 
 pub const STELLAR_MISSIONS: NciArray<u32, StellarMission> = include!("../data/stellar_missions.rs");
 
+pub static STELLAR_ITEMS: std::sync::LazyLock<std::collections::HashSet<u32>> =
+    std::sync::LazyLock::new(||
+        STELLAR_MISSIONS
+            .values()
+            .map(|mission| mission.recipe_ids)
+            .flatten()
+            .map(|recipe_id| RECIPES.get(*recipe_id).unwrap().item_id)
+            .collect()
+    );
+
 pub fn get_game_settings(
     recipe: Recipe,
     custom_recipe_overrides: Option<CustomRecipeOverrides>,

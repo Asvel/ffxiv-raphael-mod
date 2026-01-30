@@ -20,6 +20,13 @@ enum SolverEvent {
     Finished(Option<SolverException>),
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MinimumStats {
+    pub craftsmanship: Option<u16>,
+    pub control: Option<u16>,
+    pub cp: Option<u16>,
+}
+
 #[cfg(any(debug_assertions, feature = "dev-panel"))]
 #[derive(Debug, Default)]
 struct DevPanelState {
@@ -29,10 +36,12 @@ struct DevPanelState {
 
 pub struct MacroSolverApp {
     app_context: AppContext,
+    saved_rotations_sync_requests: VecDeque<Option<Rotation>>,
 
     #[cfg(any(debug_assertions, feature = "dev-panel"))]
     dev_panel_state: DevPanelState,
 
+    main_window_focused_at: Option<std::time::Instant>,
     stats_edit_window_open: bool,
     saved_rotations_window_open: bool,
     missing_stats_error_window_open: bool,
@@ -46,6 +55,9 @@ pub struct MacroSolverApp {
 
     solver_events: Arc<Mutex<VecDeque<SolverEvent>>>,
     solver_interrupt: raphael_solver::AtomicFlag,
+
+    minimum_stats: MinimumStats,
+    minimum_stats_params_hash: u64,
 }
 
 impl MacroSolverApp {
@@ -65,17 +77,19 @@ impl MacroSolverApp {
         cc.egui_ctx
             .data_mut(egui::util::IdTypeMap::remove_by_type::<egui::scroll_area::State>);
 
-        load_fonts(&cc.egui_ctx);
+        set_fonts(&cc.egui_ctx, app_context.locale);
 
         #[cfg(not(target_arch = "wasm32"))]
         crate::update::check_for_update();
 
         Self {
             app_context,
+            saved_rotations_sync_requests: VecDeque::new(),
 
             #[cfg(any(debug_assertions, feature = "dev-panel"))]
             dev_panel_state: DevPanelState::default(),
 
+            main_window_focused_at: None,
             stats_edit_window_open: false,
             saved_rotations_window_open: false,
             missing_stats_error_window_open: false,
@@ -89,6 +103,9 @@ impl MacroSolverApp {
 
             solver_events: Arc::new(Mutex::new(VecDeque::new())),
             solver_interrupt: raphael_solver::AtomicFlag::new(),
+
+            minimum_stats: MinimumStats::default(),
+            minimum_stats_params_hash: 0,
         }
     }
 }
@@ -97,10 +114,14 @@ impl eframe::App for MacroSolverApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let locale = self.app_context.locale;
-        #[cfg(target_arch = "wasm32")]
-        self.load_fonts_dyn(ctx);
+
+        set_fonts(ctx, locale);
+
+        self.set_window_title(ctx);
 
         self.process_solver_events();
+
+        self.process_storage_syncing(ctx, _frame);
 
         #[cfg(not(target_arch = "wasm32"))]
         crate::update::show_dialogues(ctx, locale);
@@ -247,22 +268,14 @@ impl eframe::App for MacroSolverApp {
                         ui.add(
                             egui::Hyperlink::from_label_and_url(
                                 t!(locale, "View source on GitHub"),
-                                "https://github.com/KonaeAkira/raphael-rs",
+                                "https://github.com/Asvel/ffxiv-raphael-cn",
                             )
                             .open_in_new_tab(true),
                         );
                         ui.label("/");
                         ui.add(
                             egui::Hyperlink::from_label_and_url(
-                                t!(locale, "Join Discord"),
-                                "https://discord.com/invite/m2aCy3y8he",
-                            )
-                            .open_in_new_tab(true),
-                        );
-                        ui.label("/");
-                        ui.add(
-                            egui::Hyperlink::from_label_and_url(
-                                t!(locale, "Support me on Ko-fi"),
+                                t!(locale, "Support mainline author on Ko-fi"),
                                 "https://ko-fi.com/konaeakira",
                             )
                             .open_in_new_tab(true),
@@ -407,10 +420,20 @@ impl eframe::App for MacroSolverApp {
     fn auto_save_interval(&self) -> std::time::Duration {
         std::time::Duration::from_secs(1)
     }
+
+    fn persist_egui_memory(&self) -> bool {
+        // pause egui states saving to keep storage unchanged, to skip storage file rewriting,
+        // to avoid most unwanted SAVED_ROTATIONS overwriting under multiple app instances
+        match self.main_window_focused_at {
+            Some(time) => time.elapsed().as_secs() >= 3,
+            None => false,
+        }
+    }
 }
 
 impl MacroSolverApp {
     fn process_solver_events(&mut self) {
+        let mut submit_new_rotation = false;
         let mut solver_events = self.solver_events.lock().unwrap();
         while let Some(event) = solver_events.pop_front() {
             match event {
@@ -422,16 +445,23 @@ impl MacroSolverApp {
                     self.solver_pending = false;
                     self.solver_interrupt.clear();
                     if exception.is_none() {
-                        let new_rotation = Rotation::new(&self.app_context, self.actions.clone());
-                        self.app_context.saved_rotations_data.add_solved_rotation(
-                            new_rotation,
-                            &self.app_context.saved_rotations_config,
-                        );
+                        submit_new_rotation = true;
                     } else {
                         self.solver_error = exception;
                     }
                 }
             }
+        }
+        drop(solver_events);
+
+        if submit_new_rotation {
+            self.find_minimum_stats();
+            let new_rotation = Rotation::new(
+                &self.app_context,
+                self.actions.clone(),
+                self.minimum_stats,
+            );
+            self.saved_rotations_sync_requests.push_back(Some(new_rotation));
         }
     }
 
@@ -549,7 +579,13 @@ impl MacroSolverApp {
     }
 
     fn draw_simulator_widget(&mut self, ui: &mut egui::Ui) {
-        ui.add(Simulator::new(&self.app_context, ui.ctx(), &self.actions));
+        self.find_minimum_stats();
+        ui.add(Simulator::new(
+            &mut self.app_context,
+            ui.ctx(),
+            &self.actions,
+            &self.minimum_stats,
+        ));
     }
 
     fn draw_list_select_widgets(&mut self, ui: &mut egui::Ui) {
@@ -632,6 +668,12 @@ impl MacroSolverApp {
                     [0, 1, 2, 3, 4, 5, 6, 7],
                     |job_id: u8| get_job_name(job_id, locale),
                 ));
+                if ui.add_enabled(
+                    self.app_context.crafter_config.is_detached(),
+                    egui::Button::new(egui::RichText::from("↙").size(14.0))
+                ).clicked() {
+                    self.app_context.crafter_config.reset_to_job();
+                }
             });
         });
         ui.separator();
@@ -669,7 +711,9 @@ impl MacroSolverApp {
                     }
                 });
                 ui.label("➡");
-                ui.add(egui::DragValue::new(cms_base).range(0..=9000));
+                if ui.add(egui::DragValue::new(cms_base).range(0..=9000)).changed() {
+                    self.app_context.crafter_config.detach_from_job();
+                }
             });
         });
         ui.horizontal(|ui| {
@@ -701,7 +745,9 @@ impl MacroSolverApp {
                     }
                 });
                 ui.label("➡");
-                ui.add(egui::DragValue::new(control_base).range(0..=9000));
+                if ui.add(egui::DragValue::new(control_base).range(0..=9000)).changed() {
+                    self.app_context.crafter_config.detach_from_job();
+                }
             });
         });
         ui.horizontal(|ui| {
@@ -732,16 +778,20 @@ impl MacroSolverApp {
                     }
                 });
                 ui.label("➡");
-                ui.add(egui::DragValue::new(cp_base).range(0..=9000));
+                if ui.add(egui::DragValue::new(cp_base).range(0..=9000)).changed() {
+                    self.app_context.crafter_config.detach_from_job();
+                }
             });
         });
         ui.horizontal(|ui| {
             ui.label(t!(locale, "Job level"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.add(
+                if ui.add(
                     egui::DragValue::new(&mut self.app_context.active_stats_mut().level)
                         .range(1..=100),
-                );
+                ).changed() {
+                    self.app_context.crafter_config.detach_from_job();
+                }
             });
         });
         ui.separator();
@@ -778,10 +828,12 @@ impl MacroSolverApp {
 
         ui.label(egui::RichText::new(t!(locale, "Actions")).strong());
         if self.app_context.active_stats().level >= Manipulation::LEVEL_REQUIREMENT {
-            ui.add(egui::Checkbox::new(
+            if ui.add(egui::Checkbox::new(
                 &mut self.app_context.active_stats_mut().manipulation,
                 action_name(Action::Manipulation, locale),
-            ));
+            )).changed() {
+                self.app_context.crafter_config.detach_from_job();
+            }
         } else {
             ui.add_enabled(
                 false,
@@ -789,10 +841,12 @@ impl MacroSolverApp {
             );
         }
         if self.app_context.active_stats().level >= HeartAndSoul::LEVEL_REQUIREMENT {
-            ui.add(egui::Checkbox::new(
+            if ui.add(egui::Checkbox::new(
                 &mut self.app_context.active_stats_mut().heart_and_soul,
                 action_name(Action::HeartAndSoul, locale),
-            ));
+            )).changed() {
+                self.app_context.crafter_config.detach_from_job();
+            }
         } else {
             ui.add_enabled(
                 false,
@@ -800,10 +854,12 @@ impl MacroSolverApp {
             );
         }
         if self.app_context.active_stats().level >= QuickInnovation::LEVEL_REQUIREMENT {
-            ui.add(egui::Checkbox::new(
+            if ui.add(egui::Checkbox::new(
                 &mut self.app_context.active_stats_mut().quick_innovation,
                 action_name(Action::QuickInnovation, locale),
-            ));
+            )).changed() {
+                self.app_context.crafter_config.detach_from_job();
+            }
         } else {
             ui.add_enabled(
                 false,
@@ -837,7 +893,7 @@ impl MacroSolverApp {
                 );
                 ui.add(egui::Hyperlink::from_label_and_url(
                     egui::RichText::new(t!(locale, "Download latest release from GitHub")).small(),
-                    "https://github.com/KonaeAkira/raphael-rs/releases/latest",
+                    "https://github.com/Asvel/ffxiv-raphael-cn/releases/latest",
                 ));
             }
         }
@@ -1013,6 +1069,103 @@ impl MacroSolverApp {
         }
     }
 
+    fn find_minimum_stats(&mut self) {
+        if self.solver_pending
+            || self.app_context.custom_recipe_overrides_config.use_base_increase_overrides {
+            if self.minimum_stats_params_hash != 0 {
+                self.minimum_stats_params_hash = 0;
+                self.minimum_stats = MinimumStats::default();
+            }
+            return;
+        }
+
+        let mut game_settings = self.app_context.game_settings();
+        let initial_quality = self.app_context.initial_quality();
+
+        let target_progress = game_settings.max_progress as u32;
+        let target_quality = self
+            .app_context
+            .solver_config
+            .quality_target
+            .get_target(game_settings.max_quality)
+            .saturating_sub(initial_quality) as u32;
+
+        let params_hash = egui::Id::new((&game_settings, target_quality, &self.actions)).value();
+        if self.minimum_stats_params_hash == params_hash {
+            return;
+        }
+        self.minimum_stats_params_hash = params_hash;
+
+        let initial_state = raphael_sim::SimulationState::new(&game_settings);
+
+        let mut actual_result = initial_state;
+        for action in &self.actions {
+            actual_result = actual_result
+                .use_action(*action, raphael_sim::Condition::Normal, &game_settings)
+                .unwrap_or(actual_result);
+        }
+        if actual_result.progress < target_progress {
+            self.minimum_stats = MinimumStats::default();
+            return;
+        }
+        self.minimum_stats.cp = Some(game_settings.max_cp - actual_result.cp);
+
+        let (mut min_progress, mut max_progress) = (1u16, game_settings.base_progress);
+        let (mut min_quality, mut max_quality, mut can_target_quality) =
+            if actual_result.quality >= target_quality {
+                (1u16, game_settings.base_quality, true)
+            } else {
+                (game_settings.base_quality, game_settings.base_quality * 3 / 2, false)
+            };
+        if target_quality == 0 || self.actions[0] == Action::TrainedEye {
+            max_quality = 1;
+        }
+        while min_progress + 1 < max_progress || min_quality + 1 < max_quality {
+            let mut state = initial_state;
+            game_settings.base_progress = (min_progress + max_progress) / 2;
+            game_settings.base_quality = (min_quality + max_quality) / 2;
+            for action in &self.actions {
+                state = state
+                    .use_action(*action, raphael_sim::Condition::Normal, &game_settings)
+                    .unwrap_or(state);
+            }
+            if state.progress < target_progress {
+                min_progress = game_settings.base_progress;
+            } else {
+                max_progress = game_settings.base_progress;
+            }
+            if state.quality < target_quality {
+                min_quality = game_settings.base_quality;
+            } else {
+                max_quality = game_settings.base_quality;
+                can_target_quality = true;
+            }
+        }
+
+        let max_level_scaling = self.app_context.recipe_config.recipe.max_level_scaling;
+        let rlvl = if max_level_scaling != 0 {
+            let job_level = std::cmp::min(max_level_scaling, game_settings.job_level);
+            raphael_data::LEVEL_ADJUST_TABLE[job_level as usize] as usize
+        } else {
+            self.app_context.recipe_config.recipe.recipe_level as usize
+        };
+        let rlvl_record = raphael_data::RLVLS[rlvl];
+        let mut craftsmanship = max_progress as f32;
+        let mut control = max_quality as f32;
+        if game_settings.job_level <= rlvl_record.job_level {
+            craftsmanship = craftsmanship * 100.0 / rlvl_record.progress_mod as f32;
+            control = control * 100.0 / rlvl_record.quality_mod as f32;
+        }
+        craftsmanship = (craftsmanship - 2.0) * rlvl_record.progress_div as f32 / 10.0;
+        control = (control - 35.0) * rlvl_record.quality_div as f32 / 10.0;
+        self.minimum_stats.craftsmanship = Some(craftsmanship.ceil() as u16);
+        self.minimum_stats.control = if can_target_quality {
+            Some(control.ceil() as u16)
+        } else {
+            None
+        };
+    }
+
     fn draw_macro_output_widget(&mut self, ui: &mut egui::Ui) {
         ui.add(MacroView::new(&mut self.app_context, &mut self.actions));
     }
@@ -1030,149 +1183,150 @@ impl MacroSolverApp {
         );
     }
 
-    #[cfg(target_arch = "wasm32")]
-    fn load_fonts_dyn(&self, ctx: &egui::Context) {
-        if self.app_context.locale == Locale::JP {
-            let uri = concat!(
-                env!("BASE_URL"),
-                "/fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf"
-            );
-            load_font_dyn(ctx, "NotoSansJP-Regular", uri);
-        } else if self.app_context.locale == Locale::CN {
-            let uri = concat!(
-                env!("BASE_URL"),
-                "/fonts/Noto_Sans_SC/static/NotoSansSC-Regular.ttf"
-            );
-            load_font_dyn(ctx, "NotoSansSC-Regular", uri);
-        } else if self.app_context.locale == Locale::KR {
-            let uri = concat!(
-                env!("BASE_URL"),
-                "/fonts/Noto_Sans_KR/static/NotoSansKR-Regular.ttf"
-            );
-            load_font_dyn(ctx, "NotoSansKR-Regular", uri);
-        } else if self.app_context.locale == Locale::TW {
-            let uri = concat!(
-                env!("BASE_URL"),
-                "/fonts/Noto_Sans_TC/static/NotoSansTC-Regular.ttf"
-            );
-            load_font_dyn(ctx, "NotoSansTC-Regular", uri);
+    fn set_window_title(&self, ctx: &egui::Context) {
+        let egui_id_current = egui::Id::new("title_item");
+        let current_item_id = self.app_context.recipe_config.recipe.item_id;
+        if ctx.data(|data| data.get_temp(egui_id_current)) != Some(current_item_id) {
+            ctx.data_mut(|data| data.insert_temp(egui_id_current, current_item_id));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(
+                match raphael_data::get_raw_item_name(current_item_id, self.app_context.locale) {
+                    Some(item_name) => format!("{item_name} - Raphael XIV"),
+                    None => "Raphael XIV".to_owned(),
+                }
+            ));
+        }
+    }
+
+    fn process_storage_syncing(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.input(|input| {
+            for event in input.raw.events.iter().rev() {
+                if let egui::Event::WindowFocused(focused) = event {
+                    if *focused {
+                        self.saved_rotations_sync_requests.push_back(None);
+                        self.main_window_focused_at = Some(std::time::Instant::now());
+                    } else {
+                        self.main_window_focused_at = None;
+                    }
+                    break;
+                }
+            }
+        });
+
+        #[cfg(not(target_arch = "wasm32"))]
+        // native storage caches values forever, we can only read it from file manually
+        let mut sync_saved_rotations = || {
+            match eframe::storage_dir("Raphael XIV") {
+                Some(path) => {
+                    let uri = format!("file://{}", path.join("app.ron").to_str().unwrap());
+                    match ctx.try_load_bytes(&uri) {
+                        Ok(egui::load::BytesPoll::Ready { bytes, .. }) => {
+                            type KV = std::collections::HashMap<String, String>;
+                            if let Ok(kv) = ron::de::from_bytes::<KV>(&bytes) {
+                                if let Some(value) = kv.get("SAVED_ROTATIONS") {
+                                    if let Ok(value) = ron::de::from_str(value) {
+                                        self.app_context.saved_rotations_data = value;
+                                    }
+                                }
+                            }
+                            for loader in ctx.loaders().bytes.lock().iter() {
+                                loader.forget(&uri);
+                            }
+                            true
+                        },
+                        _ => false,  // waiting file IO
+                    }
+                },
+                None => true,  // no storage, continue subsequent operations as success
+            }
+        };
+        #[cfg(target_arch = "wasm32")]
+        // web storage retrieves value from browser directly
+        let mut sync_saved_rotations = || {
+            if let Some(storage) = _frame.storage() {
+                if let Some(value) = eframe::get_value(storage, "SAVED_ROTATIONS") {
+                    self.saved_rotations_data = value;
+                }
+            }
+            true
+        };
+
+        if self.saved_rotations_sync_requests.len() > 0 && sync_saved_rotations() {
+            while let Some(request) = self.saved_rotations_sync_requests.pop_front() {
+                if let Some(rotation) = request {
+                    self.app_context.saved_rotations_data.add_solved_rotation(
+                        rotation,
+                        &self.app_context.saved_rotations_config,
+                    );
+                }
+            }
         }
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn load_font_dyn(ctx: &egui::Context, font_name: &str, uri: &str) {
-    use egui::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
-    let id = egui::Id::new(format!("{} loaded", uri));
-    if ctx.data(|data| data.get_temp(id).unwrap_or(false)) {
+fn set_fonts(ctx: &egui::Context, locale: Locale) {
+    let egui_id_current = egui::Id::new("font_locale");
+    if ctx.data(|data| data.get_temp(egui_id_current)) == Some(locale) {
         return;
     }
-    if let Ok(egui::load::BytesPoll::Ready { bytes, .. }) = ctx.try_load_bytes(uri) {
-        ctx.add_font(FontInsert::new(
-            font_name,
-            egui::FontData::from_owned(bytes.to_vec()),
-            vec![
-                InsertFontFamily {
-                    family: egui::FontFamily::Proportional,
-                    priority: FontPriority::Lowest,
-                },
-                InsertFontFamily {
-                    family: egui::FontFamily::Monospace,
-                    priority: FontPriority::Lowest,
-                },
-            ],
-        ));
-        ctx.data_mut(|data| *data.get_temp_mut_or_default(id) = true);
-        log::debug!("Font loaded: {}", font_name);
-    }
-}
+    ctx.data_mut(|data| data.insert_temp(egui_id_current, locale));
 
-fn load_fonts(ctx: &egui::Context) {
-    use egui::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
-    ctx.add_font(FontInsert::new(
+    let mut fonts = egui::FontDefinitions::default();
+    let mut add_font = |font_name: &'static str, font_data: egui::FontData| {
+        fonts.font_data.insert(font_name.to_owned(), Arc::new(font_data));
+        for family in fonts.families.values_mut() {
+            family.insert(family.len() - 2, font_name.to_owned());
+        }
+    };
+    add_font(
         "XIV_Icon_Recreations",
         egui::FontData::from_static(include_bytes!(
             "../assets/fonts/XIV_Icon_Recreations/XIV_Icon_Recreations.ttf"
-        )),
-        vec![
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Lowest,
-            },
-            InsertFontFamily {
-                family: egui::FontFamily::Monospace,
-                priority: FontPriority::Lowest,
-            },
-        ],
-    ));
-    #[cfg(not(target_arch = "wasm32"))]
-    ctx.add_font(FontInsert::new(
-        "NotoSansJP-Regular",
-        egui::FontData::from_static(include_bytes!(
-            "../assets/fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf"
-        )),
-        vec![
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Lowest,
-            },
-            InsertFontFamily {
-                family: egui::FontFamily::Monospace,
-                priority: FontPriority::Lowest,
-            },
-        ],
-    ));
-    #[cfg(not(target_arch = "wasm32"))]
-    ctx.add_font(FontInsert::new(
-        "NotoSansSC-Regular",
-        egui::FontData::from_static(include_bytes!(
-            "../assets/fonts/Noto_Sans_SC/static/NotoSansSC-Regular.ttf"
-        )),
-        vec![
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Lowest,
-            },
-            InsertFontFamily {
-                family: egui::FontFamily::Monospace,
-                priority: FontPriority::Lowest,
-            },
-        ],
-    ));
-    #[cfg(not(target_arch = "wasm32"))]
-    ctx.add_font(FontInsert::new(
-        "NotoSansKR-Regular",
-        egui::FontData::from_static(include_bytes!(
-            "../assets/fonts/Noto_Sans_KR/static/NotoSansKR-Regular.ttf"
-        )),
-        vec![
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Lowest,
-            },
-            InsertFontFamily {
-                family: egui::FontFamily::Monospace,
-                priority: FontPriority::Lowest,
-            },
-        ],
-    ));
-    #[cfg(not(target_arch = "wasm32"))]
-    ctx.add_font(FontInsert::new(
-        "NotoSansTC-Regular",
-        egui::FontData::from_static(include_bytes!(
-            "../assets/fonts/Noto_Sans_TC/static/NotoSansTC-Regular.ttf"
-        )),
-        vec![
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Lowest,
-            },
-            InsertFontFamily {
-                family: egui::FontFamily::Monospace,
-                priority: FontPriority::Lowest,
-            },
-        ],
-    ));
+        ))
+    );
+    match locale {
+        Locale::JP => add_font(
+            "NotoSansJP",
+            egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Noto_Sans_JP/subset.ttf"
+            ))
+            .tweak(egui::FontTweak {
+                y_offset_factor: -0.05,
+                ..Default::default()
+            })
+        ),
+        Locale::CN => add_font(
+            "NotoSansSC",
+            egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Noto_Sans_SC/subset.ttf"
+            ))
+            .tweak(egui::FontTweak {
+                y_offset_factor: -0.05,
+                ..Default::default()
+            })
+        ),
+        Locale::KR => add_font(
+            "NotoSansKR",
+            egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Noto_Sans_KR/subset.ttf"
+            ))
+            .tweak(egui::FontTweak {
+                y_offset_factor: -0.05,
+                ..Default::default()
+            })
+        ),
+        Locale::TW => add_font(
+            "NotoSansTC",
+            egui::FontData::from_static(include_bytes!(
+                "../assets/fonts/Noto_Sans_TC/subset.ttf"
+            ))
+            .tweak(egui::FontTweak {
+                y_offset_factor: -0.05,
+                ..Default::default()
+            })
+        ),
+        _ => (),
+    }
+    ctx.set_fonts(fonts);
 }
 
 fn spawn_solver(
