@@ -1215,7 +1215,7 @@ impl MacroSolverApp {
         #[cfg(not(target_arch = "wasm32"))]
         // native storage caches values forever, we can only read it from file manually
         let mut sync_saved_rotations = || {
-            match eframe::storage_dir("Raphael XIV") {
+            match eframe::storage_dir("Raphael XIV Mod") {
                 Some(path) => {
                     let uri = format!("file://{}", path.join("app.ron").to_str().unwrap());
                     match ctx.try_load_bytes(&uri) {

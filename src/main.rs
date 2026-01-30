@@ -6,7 +6,7 @@
 #[cfg(all(target_os = "windows", not(debug_assertions)))]
 fn init_logging() {
     // Ensure app storage folder exists
-    let mut file_path = eframe::storage_dir("Raphael XIV").unwrap();
+    let mut file_path = eframe::storage_dir("Raphael XIV Mod").unwrap();
     if !std::fs::exists(&file_path).unwrap() {
         let creation_result = std::fs::create_dir_all(&file_path);
         assert!(creation_result.is_ok());
@@ -86,7 +86,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "Raphael XIV",
+        "Raphael XIV Mod",
         native_options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
