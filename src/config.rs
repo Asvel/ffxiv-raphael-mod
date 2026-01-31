@@ -89,6 +89,13 @@ impl CrafterConfig {
         self.attached_job = None;
     }
 
+    pub fn detach_from_job_if_changed(&mut self) {
+        if let Some(job) = self.attached_job
+            && self.working_stats != self.crafter_stats[job as usize] {
+            self.detach_from_job();
+        }
+    }
+
     pub fn is_detached(&self) -> bool {
         self.attached_job.is_none()
     }

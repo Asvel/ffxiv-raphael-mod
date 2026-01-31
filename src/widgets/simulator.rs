@@ -158,7 +158,7 @@ impl Simulator<'_> {
                             if ui.add_enabled(
                                 config_stat != crafter_stat,
                                 egui::Button::new(t_format!(locale,
-                                    "Set crafter stat to {crafter_stat}")),
+                                    "Set crafter stat to {stat}")),
                             ).clicked() {
                                 set_config_stat(crafter_stat);
                                 ui.close();

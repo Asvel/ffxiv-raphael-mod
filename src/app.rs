@@ -711,9 +711,7 @@ impl MacroSolverApp {
                     }
                 });
                 ui.label("➡");
-                if ui.add(egui::DragValue::new(cms_base).range(0..=9000)).changed() {
-                    self.app_context.crafter_config.detach_from_job();
-                }
+                ui.add(egui::DragValue::new(cms_base).range(0..=9000));
             });
         });
         ui.horizontal(|ui| {
@@ -745,9 +743,7 @@ impl MacroSolverApp {
                     }
                 });
                 ui.label("➡");
-                if ui.add(egui::DragValue::new(control_base).range(0..=9000)).changed() {
-                    self.app_context.crafter_config.detach_from_job();
-                }
+                ui.add(egui::DragValue::new(control_base).range(0..=9000));
             });
         });
         ui.horizontal(|ui| {
@@ -778,20 +774,16 @@ impl MacroSolverApp {
                     }
                 });
                 ui.label("➡");
-                if ui.add(egui::DragValue::new(cp_base).range(0..=9000)).changed() {
-                    self.app_context.crafter_config.detach_from_job();
-                }
+                ui.add(egui::DragValue::new(cp_base).range(0..=9000));
             });
         });
         ui.horizontal(|ui| {
             ui.label(t!(locale, "Job level"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(
+                ui.add(
                     egui::DragValue::new(&mut self.app_context.active_stats_mut().level)
                         .range(1..=100),
-                ).changed() {
-                    self.app_context.crafter_config.detach_from_job();
-                }
+                );
             });
         });
         ui.separator();
@@ -828,12 +820,10 @@ impl MacroSolverApp {
 
         ui.label(egui::RichText::new(t!(locale, "Actions")).strong());
         if self.app_context.active_stats().level >= Manipulation::LEVEL_REQUIREMENT {
-            if ui.add(egui::Checkbox::new(
+            ui.add(egui::Checkbox::new(
                 &mut self.app_context.active_stats_mut().manipulation,
                 action_name(Action::Manipulation, locale),
-            )).changed() {
-                self.app_context.crafter_config.detach_from_job();
-            }
+            ));
         } else {
             ui.add_enabled(
                 false,
@@ -841,12 +831,10 @@ impl MacroSolverApp {
             );
         }
         if self.app_context.active_stats().level >= HeartAndSoul::LEVEL_REQUIREMENT {
-            if ui.add(egui::Checkbox::new(
+            ui.add(egui::Checkbox::new(
                 &mut self.app_context.active_stats_mut().heart_and_soul,
                 action_name(Action::HeartAndSoul, locale),
-            )).changed() {
-                self.app_context.crafter_config.detach_from_job();
-            }
+            ));
         } else {
             ui.add_enabled(
                 false,
@@ -854,12 +842,10 @@ impl MacroSolverApp {
             );
         }
         if self.app_context.active_stats().level >= QuickInnovation::LEVEL_REQUIREMENT {
-            if ui.add(egui::Checkbox::new(
+            ui.add(egui::Checkbox::new(
                 &mut self.app_context.active_stats_mut().quick_innovation,
                 action_name(Action::QuickInnovation, locale),
-            )).changed() {
-                self.app_context.crafter_config.detach_from_job();
-            }
+            ));
         } else {
             ui.add_enabled(
                 false,
@@ -898,6 +884,8 @@ impl MacroSolverApp {
             }
         }
         ui.separator();
+
+        self.app_context.crafter_config.detach_from_job_if_changed();
 
         ui.label(egui::RichText::new(t!(locale, "Solver settings")).strong());
         ui.horizontal(|ui| {
