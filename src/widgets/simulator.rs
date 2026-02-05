@@ -1,6 +1,6 @@
 use raphael_data::Locale;
 use raphael_data::{Recipe, Consumable};
-use raphael_sim::{Action, Settings, SimulationState};
+use raphael_sim::{Action, ActionError, Settings, SimulationState};
 use raphael_translations::{t, t_format};
 
 use crate::{
@@ -320,7 +320,7 @@ impl Simulator<'_> {
         });
     }
 
-    fn draw_actions(&self, ui: &mut egui::Ui, errors: &[Result<(), &str>]) {
+    fn draw_actions(&self, ui: &mut egui::Ui, errors: &[Result<(), ActionError>]) {
         ui.group(|ui| {
             ui.style_mut().spacing.item_spacing = egui::vec2(8.0, 3.0);
             egui::ScrollArea::horizontal().show(ui, |ui| {
