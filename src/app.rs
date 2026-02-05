@@ -1194,7 +1194,7 @@ impl MacroSolverApp {
         }
     }
 
-    fn process_storage_syncing(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn process_storage_syncing(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         ctx.input(|input| {
             for event in input.raw.events.iter().rev() {
                 if let egui::Event::WindowFocused(focused) = event {
@@ -1239,7 +1239,7 @@ impl MacroSolverApp {
         #[cfg(target_arch = "wasm32")]
         // web storage retrieves value from browser directly
         let mut sync_saved_rotations = || {
-            if let Some(storage) = _frame.storage() {
+            if let Some(storage) = frame.storage() {
                 if let Some(value) = eframe::get_value(storage, "SAVED_ROTATIONS") {
                     self.saved_rotations_data = value;
                 }
@@ -1248,13 +1248,19 @@ impl MacroSolverApp {
         };
 
         if self.saved_rotations_sync_requests.len() > 0 && sync_saved_rotations() {
+            let mut changed = false;
             while let Some(request) = self.saved_rotations_sync_requests.pop_front() {
                 if let Some(rotation) = request {
                     self.app_context.saved_rotations_data.add_solved_rotation(
                         rotation,
                         &self.app_context.saved_rotations_config,
                     );
+                    changed = true;
                 }
+            }
+            if changed && let Some(storage) = frame.storage_mut() {
+                self.app_context.save(storage);
+                storage.flush();
             }
         }
     }
