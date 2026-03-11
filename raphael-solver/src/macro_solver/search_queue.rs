@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, hash_map::Entry};
 
 use raphael_sim::SimulationState;
+use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 
 use crate::{
@@ -12,7 +13,7 @@ use super::pareto_front::ParetoFront;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SearchScore {
-    pub quality_upper_bound: u32,
+    pub quality_upper_bound: u16,
     pub steps_lower_bound: u8,
     pub duration_lower_bound: u8,
     pub current_steps: u8,
@@ -29,7 +30,7 @@ impl SearchScore {
     };
 
     pub const MAX: Self = Self {
-        quality_upper_bound: u32::MAX,
+        quality_upper_bound: u16::MAX,
         steps_lower_bound: 0,
         duration_lower_bound: 0,
         current_steps: 0,
@@ -176,8 +177,8 @@ impl SearchQueue {
         if let Some(score) = self.batch_ordering.pop_last()
             && let Some(batch) = self.batches.remove(&score)
         {
-            let mut batch = batch
-                .into_iter()
+            let batch = batch
+                .into_par_iter()
                 .map(|candidate_node| {
                     let parent_node_state =
                         *self.visited_nodes[candidate_node.parent_idx()].state();
@@ -192,21 +193,20 @@ impl SearchQueue {
                         state: candidate_node_state.unwrap(),
                     }
                 })
-                .collect::<Vec<_>>();
+                .collect();
             // Filter out Pareto-dominated nodes.
-            batch.sort_unstable_by(|lhs, rhs| {
-                pareto_weight(rhs.state()).cmp(&pareto_weight(lhs.state()))
-            });
-            batch.retain(|node| self.pareto_front.insert(*node.state()));
-            // Construct the returned batch.
+            let old_len = self.visited_nodes.len();
+            self.visited_nodes
+                .extend(self.pareto_front.insert_batch(batch, VisitedNode::state));
             // Each node in the returned batch tracks its own idx, not the idx of its parent.
-            let ret = batch
+            let nodes = self
+                .visited_nodes
                 .iter()
                 .enumerate()
-                .map(|(idx, node)| (*node.state(), self.visited_nodes.len() + idx))
+                .skip(old_len)
+                .map(|(idx, node)| (*node.state(), idx))
                 .collect::<Vec<_>>();
-            self.visited_nodes.extend(batch);
-            Some(Batch { score, nodes: ret })
+            Some(Batch { score, nodes })
         } else {
             None
         }
@@ -230,12 +230,4 @@ impl SearchQueue {
             processed_nodes: self.visited_nodes.len(),
         }
     }
-}
-
-fn pareto_weight(state: &SimulationState) -> u64 {
-    u64::from(state.cp)
-        + u64::from(state.durability)
-        + u64::from(state.quality)
-        + u64::from(state.unreliable_quality)
-        + state.effects.into_bits()
 }

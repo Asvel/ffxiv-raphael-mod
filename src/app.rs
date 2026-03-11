@@ -128,8 +128,8 @@ impl eframe::App for MacroSolverApp {
 
         if self.missing_stats_error_window_open {
             egui::Modal::new(egui::Id::new("min_stats_warning")).show(ctx, |ui| {
-                let req_cms = self.app_context.recipe_config.recipe.req_craftsmanship;
-                let req_ctrl = self.app_context.recipe_config.recipe.req_control;
+                let req_cms = self.app_context.recipe_config.recipe().req_craftsmanship;
+                let req_ctrl = self.app_context.recipe_config.recipe().req_control;
                 ui.style_mut().spacing.item_spacing = egui::vec2(3.0, 3.0);
                 ui.label(egui::RichText::new("Error").strong());
                 ui.separator();
@@ -790,7 +790,7 @@ impl MacroSolverApp {
 
         ui.label(egui::RichText::new(t!(locale, "HQ materials")).strong());
         let mut has_hq_ingredient = false;
-        let recipe_ingredients = self.app_context.recipe_config.recipe.ingredients;
+        let recipe_ingredients = self.app_context.recipe_config.recipe().ingredients;
         if let QualitySource::HqMaterialList(provided_ingredients) =
             &mut self.app_context.recipe_config.quality_source
         {
@@ -852,15 +852,31 @@ impl MacroSolverApp {
                 egui::Checkbox::new(&mut false, action_name(Action::QuickInnovation, locale)),
             );
         }
-        // This is only a temporary solution to enable using Stellar Steady Hand in the UI.
-        // TODO: Design permanent solution.
-        ui.horizontal(|ui| {
-            ui.label(action_name(Action::StellarSteadyHand, locale));
-            ui.add(
-                egui::DragValue::new(&mut self.app_context.stellar_steady_hand_charges)
-                    .range(0..=3),
-            );
-        });
+        let mut max_stellar_steady_hand_charges = self
+            .app_context
+            .recipe_config
+            .recipe_source
+            .max_stellar_steady_hand_charges();
+        if max_stellar_steady_hand_charges > 0 {
+            ui.horizontal(|ui| {
+                ui.label(action_name(Action::StellarSteadyHand, locale));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui: &mut egui::Ui| {
+                    ui.add_enabled(
+                        false,
+                        egui::DragValue::new(&mut max_stellar_steady_hand_charges),
+                    );
+                    ui.monospace("/");
+                    ui.add(
+                        egui::DragValue::new(
+                            &mut self.app_context.solver_config.stellar_steady_hand_charges,
+                        )
+                        .range(0..=max_stellar_steady_hand_charges),
+                    );
+                });
+            });
+        } else {
+            self.app_context.solver_config.stellar_steady_hand_charges = 0;
+        }
         let heart_and_soul_enabled = self.app_context.active_stats().level
             >= HeartAndSoul::LEVEL_REQUIREMENT
             && self.app_context.active_stats().heart_and_soul;
@@ -952,12 +968,12 @@ impl MacroSolverApp {
             ui.add(HelpText::new(t!(locale, "Find a rotation that only uses Progress-increasing actions at the end of the rotation.\n  - May decrease achievable Quality.\n  - May increase macro duration.")));
         });
 
-        if self.app_context.recipe_config.recipe.is_expert {
+        if self.app_context.recipe_config.recipe().is_expert {
             self.app_context.solver_config.adversarial = false;
         }
         ui.horizontal(|ui| {
             ui.add_enabled(
-                !self.app_context.recipe_config.recipe.is_expert,
+                !self.app_context.recipe_config.recipe().is_expert,
                 egui::Checkbox::new(
                     &mut self.app_context.solver_config.adversarial,
                     t!(locale, "Ensure 100% reliability"),
@@ -980,8 +996,8 @@ impl MacroSolverApp {
                 data.insert_temp(Id::new("SOLVE_INITIATED"), false);
             });
 
-            let craftsmanship_req = self.app_context.recipe_config.recipe.req_craftsmanship;
-            let control_req = self.app_context.recipe_config.recipe.req_control;
+            let craftsmanship_req = self.app_context.recipe_config.recipe().req_craftsmanship;
+            let control_req = self.app_context.recipe_config.recipe().req_control;
             let active_stats = self.app_context.active_stats();
             let craftsmanship_bonus = raphael_data::craftsmanship_bonus(
                 active_stats.craftsmanship,
@@ -1067,8 +1083,14 @@ impl MacroSolverApp {
     }
 
     fn find_minimum_stats(&mut self) {
-        if self.solver_pending
-            || self.app_context.custom_recipe_overrides_config.use_base_increase_overrides {
+        let mut unavailable = self.solver_pending;
+        if let crate::config::RecipeSource::Custom { overrides, .. } =
+                self.app_context.recipe_config.recipe_source
+            && overrides.base_progress_override.is_some()
+        {
+            unavailable = true;
+        }
+        if unavailable {
             if self.minimum_stats_params_hash != 0 {
                 self.minimum_stats_params_hash = 0;
                 self.minimum_stats = MinimumStats::default();
@@ -1079,13 +1101,13 @@ impl MacroSolverApp {
         let mut game_settings = self.app_context.game_settings();
         let initial_quality = self.app_context.initial_quality();
 
-        let target_progress = game_settings.max_progress as u32;
+        let target_progress = game_settings.max_progress;
         let target_quality = self
             .app_context
             .solver_config
             .quality_target
             .get_target(game_settings.max_quality)
-            .saturating_sub(initial_quality) as u32;
+            .saturating_sub(initial_quality);
 
         let params_hash = egui::Id::new((&game_settings, target_quality, &self.actions)).value();
         if self.minimum_stats_params_hash == params_hash {
@@ -1139,12 +1161,12 @@ impl MacroSolverApp {
             }
         }
 
-        let max_level_scaling = self.app_context.recipe_config.recipe.max_level_scaling;
+        let max_level_scaling = self.app_context.recipe_config.recipe().max_level_scaling;
         let rlvl = if max_level_scaling != 0 {
             let job_level = std::cmp::min(max_level_scaling, game_settings.job_level);
             raphael_data::LEVEL_ADJUST_TABLE[job_level as usize] as usize
         } else {
-            self.app_context.recipe_config.recipe.recipe_level as usize
+            self.app_context.recipe_config.recipe().recipe_level as usize
         };
         let rlvl_record = raphael_data::RLVLS[rlvl];
         let mut craftsmanship = max_progress as f32;
@@ -1182,7 +1204,7 @@ impl MacroSolverApp {
 
     fn set_window_title(&self, ctx: &egui::Context) {
         let egui_id_current = egui::Id::new("title_item");
-        let current_item_id = self.app_context.recipe_config.recipe.item_id;
+        let current_item_id = self.app_context.recipe_config.recipe().item_id;
         if ctx.data(|data| data.get_temp(egui_id_current)) != Some(current_item_id) {
             ctx.data_mut(|data| data.insert_temp(egui_id_current, current_item_id));
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(

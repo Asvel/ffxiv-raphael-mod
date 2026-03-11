@@ -62,7 +62,7 @@ impl<'a> Simulator<'a> {
             ..
         } = app_context;
         let item_always_collectable = raphael_data::ITEMS
-            .get(recipe_config.recipe.item_id)
+            .get(recipe_config.recipe().item_id)
             .map(|item| item.always_collectable)
             .unwrap_or_default();
         let config_changed = config_changed(&settings, initial_quality, solver_config, ctx);
@@ -75,7 +75,7 @@ impl<'a> Simulator<'a> {
             config_changed,
             locale: *locale,
             crafter_config,
-            recipe: &recipe_config.recipe,
+            recipe: recipe_config.recipe(),
             consumables: [app_context.selected_food, app_context.selected_potion],
             minimum_stats,
         }
@@ -177,7 +177,7 @@ impl Simulator<'_> {
                         )
                         .text(progress_bar_text(
                             state.progress,
-                            u32::from(self.settings.max_progress),
+                            self.settings.max_progress,
                             locale,
                             self.minimum_stats.craftsmanship,
                             self.recipe.req_craftsmanship,
@@ -202,12 +202,12 @@ impl Simulator<'_> {
                     ui.allocate_ui_with_layout(text_size, text_layout, |ui| {
                         ui.label(t!(locale, "Quality"));
                     });
-                    let quality = u32::from(self.initial_quality) + state.quality;
+                    let quality = self.initial_quality.saturating_add(state.quality);
                     let response = ui.add(
                         egui::ProgressBar::new(quality as f32 / self.settings.max_quality as f32)
                             .text(progress_bar_text(
                                 quality,
-                                u32::from(self.settings.max_quality),
+                                self.settings.max_quality,
                                 locale,
                                 self.minimum_stats.control,
                                 self.recipe.req_control,
@@ -291,7 +291,7 @@ impl Simulator<'_> {
                         }));
                         if !state.is_final(&self.settings) {
                             // do nothing
-                        } else if state.progress < u32::from(self.settings.max_progress) {
+                        } else if state.progress < self.settings.max_progress {
                             ui.label(t!(locale, "Synthesis failed"));
                         } else if self.item_always_collectable {
                             let (t1, t2, t3) = (
@@ -299,16 +299,16 @@ impl Simulator<'_> {
                                 QualityTarget::CollectableT2.get_target(self.settings.max_quality),
                                 QualityTarget::CollectableT3.get_target(self.settings.max_quality),
                             );
-                            let tier = match u32::from(self.initial_quality) + state.quality {
-                                quality if quality >= u32::from(t3) => 3,
-                                quality if quality >= u32::from(t2) => 2,
-                                quality if quality >= u32::from(t1) => 1,
+                            let tier = match self.initial_quality.saturating_add(state.quality) {
+                                quality if quality >= t3 => 3,
+                                quality if quality >= t2 => 2,
+                                quality if quality >= t1 => 1,
                                 _ => 0,
                             };
                             ui.label(t_format!(locale, "Tier {tier} collectable"));
                         } else {
                             let hq = raphael_data::hq_percentage(
-                                u32::from(self.initial_quality) + state.quality,
+                                self.initial_quality.saturating_add(state.quality),
                                 self.settings.max_quality,
                             )
                             .unwrap_or(0);
